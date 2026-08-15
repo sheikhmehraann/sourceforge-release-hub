@@ -1,20 +1,20 @@
-name: Automated Cloud Mirror & Sync Pipeline
+name: Mirror All Projects to SourceForge & GitHub
 
 on:
   workflow_dispatch:
     inputs:
       source_project:
-        description: "Source Project UNIX name (e.g. rama982)"
+        description: "Source Project UNIX Name"
         required: true
         type: string
         default: "rama982"
       device_filter:
-        description: "Filter by Device (e.g. X6871, X6886, or ALL)"
+        description: "Filter Device (e.g. X6871, X6886, or ALL)"
         required: false
         type: string
         default: "ALL"
       category_filter:
-        description: "Filter by Category (Flashable-ROMs, Custom-Recoveries, Custom-Kernels, Stock-Images, or ALL)"
+        description: "Filter Category (Flashable-ROMs, Custom-Recoveries, Custom-Kernels, Stock-Images, or ALL)"
         required: false
         type: string
         default: "ALL"
@@ -25,7 +25,7 @@ on:
         default: "150"
 
 jobs:
-  cloud_sync:
+  mirror_and_publish:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -33,7 +33,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python Environment
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -44,14 +44,14 @@ jobs:
           sudo apt-get install -y aria2 rsync openssh-client curl jq
           pip install -r requirements.txt
 
-      - name: Setup SSH Authentication for SourceForge
+      - name: Setup SSH Key for SourceForge FRS
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SF_SSH_KEY }}" > ~/.ssh/id_sf
           chmod 600 ~/.ssh/id_sf
           ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts
 
-      - name: Execute Automated Cloud Mirror & Publish Pipeline
+      - name: Run High-Speed Cloud Mirror Pipeline
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SF_USERNAME: ${{ secrets.SF_USERNAME }}

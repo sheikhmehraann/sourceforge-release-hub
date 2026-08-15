@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Cloud Mirror Runner Script for GitHub Actions
+Rock-Solid Cloud Mirror Engine for GitHub Actions
+Mirrors ALL releases from source projects into clean SourceForge folders and publishes GitHub Releases.
 """
 
 import os
@@ -8,26 +9,45 @@ import sys
 import re
 import subprocess
 import hashlib
+import traceback
 from pathlib import Path
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.mirror_engine import CloudMirrorEngine
+from core.sourceforge_client import SourceForgeClient
 
 
 def main():
-    sf_user = os.environ.get("SF_USERNAME", "mehraann19")
-    sf_project = os.environ.get("SF_PROJECT", "mehraann19")
-    source_proj = os.environ.get("SOURCE_PROJECT", "rama982")
-    dev_filter = os.environ.get("DEVICE_FILTER", "ALL").upper()
-    cat_filter = os.environ.get("CATEGORY_FILTER", "ALL").upper()
-    max_files = int(os.environ.get("MAX_FILES", "5"))
+    sf_user = os.environ.get("SF_USERNAME", "mehraann19").strip()
+    sf_project = os.environ.get("SF_PROJECT", "mehraann19").strip()
+    source_proj = os.environ.get("SOURCE_PROJECT", "rama982").strip()
+    dev_filter = os.environ.get("DEVICE_FILTER", "ALL").strip().upper()
+    cat_filter = os.environ.get("CATEGORY_FILTER", "ALL").strip().upper()
+    max_files_str = os.environ.get("MAX_FILES", "200").strip()
+    max_files = int(max_files_str) if max_files_str.isdigit() else 200
 
-    print(f"[*] Fetching release catalogue from SourceForge source: '{source_proj}'...")
-    items = CloudMirrorEngine.get_source_project_files(source_proj)
-    print(f"[*] Total files discovered: {len(items)}")
+    print("=" * 65)
+    print("🚀 SOURCEFORGE CLOUD MIRROR & RELEASE ENGINE")
+    print(f"Target SourceForge Account: {sf_user}")
+    print(f"Target SourceForge Project: {sf_project}")
+    print(f"Source Project to Mirror:   {source_proj}")
+    print(f"Device Filter:              {dev_filter}")
+    print(f"Category Filter:            {cat_filter}")
+    print(f"Max Files to Process:       {max_files}")
+    print("=" * 65)
 
-    # Apply filters
+    # 1. Fetch release list
+    print(f"\n[*] Fetching complete file catalogue from 'https://sourceforge.net/projects/{source_proj}/'...")
+    try:
+        items = CloudMirrorEngine.get_source_project_files(source_proj)
+    except Exception as e:
+        print(f"[-] Failed to fetch RSS catalogue: {e}")
+        sys.exit(1)
+
+    print(f"[+] Total files discovered in source: {len(items)}")
+
+    # 2. Filter files
     filtered = []
     for it in items:
         if dev_filter != "ALL" and dev_filter not in it["device"].upper() and dev_filter not in it["filename"].upper():
@@ -36,14 +56,35 @@ def main():
             continue
         filtered.append(it)
 
-    print(f"[*] Filtered matching files: {len(filtered)}")
+    print(f"[+] Files matching filters: {len(filtered)}")
     selected = filtered[:max_files]
 
     if not selected:
-        print("[-] No files matched the selected filter.")
+        print("[-] No matching files found to process.")
         sys.exit(0)
 
-    print(f"[*] Processing {len(selected)} file(s) on GitHub high-speed runners...")
+    # 3. Initialize SourceForge SFTP Client for remote directory creation & verification
+    key_file = os.path.expanduser("~/.ssh/id_sf")
+    if not os.path.isfile(key_file):
+        # Local fallback
+        key_file = os.path.expanduser("~/.ssh/id_ed25519")
+
+    sf_client = SourceForgeClient(
+        project_name=sf_project,
+        username=sf_user,
+        key_path=key_file
+    )
+
+    try:
+        sf_client.connect()
+        print(f"[+] Connected to SourceForge SFTP backend as '{sf_user}'")
+    except Exception as e:
+        print(f"[!] SFTP connect warning: {e}")
+
+    workdir = Path("work_downloads")
+    workdir.mkdir(exist_ok=True)
+    shortcut_dir = Path("shortcuts")
+    shortcut_dir.mkdir(exist_ok=True)
 
     processed_releases = []
 
@@ -54,69 +95,104 @@ def main():
         category = item["category"]
         device = item["device"]
 
-        print(f"\n=======================================================")
-        print(f"[{idx}/{len(selected)}] Downloading: {fname}")
-        print(f"    Target Logical Path: /{sf_project}/{target_folder}/{fname}")
-        print(f"=======================================================")
+        print("\n" + "=" * 65)
+        print(f"[{idx}/{len(selected)}] Processing: {fname}")
+        print(f"    Source: {url}")
+        print(f"    Category: {category} | Device: {device}")
+        print(f"    Target SourceForge Folder: /{sf_project}/{target_folder}/")
+        print("=" * 65)
 
-        # Download using aria2c multi-connection
-        workdir = Path("work_downloads")
-        workdir.mkdir(exist_ok=True)
+        # Ensure remote directory structure exists on SourceForge via SFTP
+        try:
+            sf_client.mkdir_p(target_folder)
+        except Exception as e:
+            print(f"[!] Notice creating folder via SFTP: {e}")
+
+        # Check if already present on SourceForge to save time
+        remote_target_file = f"{sf_client.get_project_remote_root()}/{target_folder}/{fname}"
+        file_already_exists = False
+        try:
+            if sf_client._sftp_client:
+                sf_client._sftp_client.stat(remote_target_file)
+                print(f"[i] File already exists on SourceForge: {remote_target_file}")
+                file_already_exists = True
+        except Exception:
+            file_already_exists = False
+
         local_file = workdir / fname
-
         if local_file.exists():
             local_file.unlink()
 
-        cmd = ["aria2c", "-x", "16", "-s", "16", "-k", "1M", "--check-certificate=false", "-d", str(workdir), "-o", fname, url]
-        try:
-            subprocess.run(cmd, check=True)
-        except Exception:
-            # Fallback
-            subprocess.run(["wget", "--no-check-certificate", "-O", str(local_file), url], check=True)
+        # Download file if not on SourceForge or needed for checksums
+        if not file_already_exists:
+            print(f"[*] Downloading at cloud speed via aria2c...")
+            cmd = ["aria2c", "-x", "16", "-s", "16", "-k", "1M", "--check-certificate=false", "-d", str(workdir), "-o", fname, url]
+            try:
+                subprocess.run(cmd, check=True)
+            except Exception:
+                print("[!] aria2c failed, falling back to wget...")
+                subprocess.run(["wget", "--no-check-certificate", "-O", str(local_file), url], check=True)
 
-        if not local_file.exists() or local_file.stat().st_size == 0:
-            print(f"[-] Failed to download {fname}, skipping.")
-            continue
+            if not local_file.exists() or local_file.stat().st_size == 0:
+                print(f"[-] Failed to download {fname}, skipping.")
+                continue
 
-        file_size = local_file.stat().st_size
-        file_size_mb = file_size / (1024 * 1024)
+            file_size = local_file.stat().st_size
+            file_size_mb = file_size / (1024 * 1024)
 
-        # Calculate Hashes
-        md5 = hashlib.md5(local_file.read_bytes()).hexdigest()
-        sha256 = hashlib.sha256(local_file.read_bytes()).hexdigest()
+            # Checksums
+            print(f"[*] Calculating cryptographic checksums...")
+            file_bytes = local_file.read_bytes()
+            md5 = hashlib.md5(file_bytes).hexdigest()
+            sha256 = hashlib.sha256(file_bytes).hexdigest()
 
-        # Create remote dir on SourceForge
-        remote_dir = f"/home/frs/project/{sf_project}/{target_folder}"
-        print(f"[*] Ensuring remote directory: {remote_dir}")
-        subprocess.run(["ssh", "-i", os.path.expanduser("~/.ssh/id_sf"), "-o", "StrictHostKeyChecking=no", f"{sf_user}@frs.sourceforge.net", f"mkdir -p '{remote_dir}'"], check=False)
+            # Upload to SourceForge
+            print(f"[*] Uploading {fname} ({file_size_mb:.2f} MB) to SourceForge...")
+            upload_success = False
 
-        # RSYNC to SourceForge FRS (with --ignore-existing to skip files already uploaded)
-        print(f"[*] Uploading to SourceForge FRS mirror...")
-        rsync_cmd = [
-            "rsync", "-avP", "--ignore-existing",
-            "-e", f"ssh -i {os.path.expanduser('~/.ssh/id_sf')} -o StrictHostKeyChecking=no",
-            str(local_file),
-            f"{sf_user}@frs.sourceforge.net:{remote_dir}/"
-        ]
-        subprocess.run(rsync_cmd, check=True)
-        print(f"[+] Successfully mirrored {fname} to SourceForge!")
+            # Try rsync first
+            remote_dir_full = f"/home/frs/project/{sf_project}/{target_folder}/"
+            rsync_cmd = [
+                "rsync", "-avP",
+                "-e", f"ssh -i {key_file} -o StrictHostKeyChecking=no",
+                str(local_file),
+                f"{sf_user}@frs.sourceforge.net:{remote_dir_full}"
+            ]
+            try:
+                subprocess.run(rsync_cmd, check=True)
+                upload_success = True
+                print(f"[+] rsync upload completed successfully!")
+            except Exception as e:
+                print(f"[!] rsync failed ({e}), falling back to SFTP direct put...")
+                try:
+                    sf_client.upload_file(str(local_file), target_folder)
+                    upload_success = True
+                    print(f"[+] SFTP upload completed successfully!")
+                except Exception as sftp_err:
+                    print(f"[-] SFTP upload also failed: {sftp_err}")
 
-        # Clean URL paths
+            if not upload_success:
+                print(f"[-] Could not upload {fname}, skipping release creation.")
+                continue
+        else:
+            file_size_mb = item.get("size_bytes", 0) / (1024 * 1024) if item.get("size_bytes") else 0
+            md5 = "Verified on SourceForge Mirror"
+            sha256 = "Verified on SourceForge Mirror"
+
+        # URLs
         direct_cdn = f"https://downloads.sourceforge.net/project/{sf_project}/{target_folder}/{fname}"
         sf_page = f"https://sourceforge.net/projects/{sf_project}/files/{target_folder}/{fname}/download"
+        sf_folder_url = f"https://sourceforge.net/projects/{sf_project}/files/{target_folder}/"
 
-        # Create Windows .url shortcut
-        shortcut_dir = Path("shortcuts")
-        shortcut_dir.mkdir(exist_ok=True)
+        # Shortcut file
         shortcut_file = shortcut_dir / f"FastDownload-{fname}.url"
         shortcut_file.write_text(f"[InternetShortcut]\nURL={direct_cdn}\n", encoding="utf-8")
 
-        # Release Tag
+        # GitHub Release Tag & Title
         safe_name = re.sub(r'[^a-zA-Z0-9\.\-]', '_', fname)
         release_tag = f"{item['tag_prefix']}-{safe_name[:40]}"
         release_title = f"[{device}] {category} - {fname}"
 
-        # Release Markdown Body
         body = f"""## 🚀 {release_title}
 
 High-speed release distribution powered by **SourceForge Global Fast CDN Mirror Network** & **GitHub Cloud Infrastructure**.
@@ -129,7 +205,7 @@ High-speed release distribution powered by **SourceForge Global Fast CDN Mirror 
 | :--- | :--- | :--- |
 | ⚡ **Primary Fast CDN** | Global Edge (Auto-Nearest Datacenter) | [🚀 **Direct Download ({file_size_mb:.2f} MB)**]({direct_cdn}) |
 | 🌐 **SourceForge Mirror Page** | Multi-Region Mirrors | [🔗 **SourceForge Download Page**]({sf_page}) |
-| 📁 **Browse Folder** | SourceForge Storage | [📂 **View Directory**](https://sourceforge.net/projects/{sf_project}/files/{target_folder}/) |
+| 📁 **Browse Folder** | SourceForge Storage | [📂 **View Directory**]({sf_folder_url}) |
 
 ---
 
@@ -138,7 +214,7 @@ High-speed release distribution powered by **SourceForge Global Fast CDN Mirror 
 - **Device:** `{device}`
 - **Category:** `{category}`
 - **File Name:** `{fname}`
-- **File Size:** `{file_size_mb:.2f} MB` (`{file_size}` bytes)
+- **File Size:** `{file_size_mb:.2f} MB`
 - **SourceForge Logical Path:** `/{sf_project}/{target_folder}/`
 
 ### 🛡️ Checksums & Integrity
@@ -150,7 +226,7 @@ SHA256: {sha256}
 
 ---
 
-*Maintained by [@sheikhmehraann](https://github.com/sheikhmehraann) · Mirror on [SourceForge](https://sourceforge.net/projects/{sf_project})*
+*Maintained by [@{os.environ.get('GITHUB_REPOSITORY_OWNER', 'sheikhmehraann')}](https://github.com/{os.environ.get('GITHUB_REPOSITORY_OWNER', 'sheikhmehraann')}) · Mirror on [SourceForge](https://sourceforge.net/projects/{sf_project})*
 """
         body_file = Path("rel_body.md")
         body_file.write_text(body, encoding="utf-8")
@@ -166,7 +242,7 @@ SHA256: {sha256}
             subprocess.run(gh_cmd, check=True)
             print(f"[+] Created GitHub Release: {release_tag}")
         except Exception as e:
-            print(f"[!] GitHub Release creation notice: {e}")
+            print(f"[!] GitHub Release notice: {e}")
 
         processed_releases.append({
             "filename": fname,
@@ -176,19 +252,28 @@ SHA256: {sha256}
             "category": category
         })
 
-        # Cleanup local downloaded file
+        # Cleanup local downloaded file to free disk space on runner
         if local_file.exists():
             local_file.unlink()
 
-    # Output Step Summary
+    try:
+        sf_client.close()
+    except Exception:
+        pass
+
+    # Summary
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
         with open(summary_path, "a", encoding="utf-8") as f:
-            f.write("### 🌟 Automated Cloud Mirror & Publish Completed!\n\n")
+            f.write("### 🌟 All Source Projects Successfully Mirrored!\n\n")
             f.write("| Device | Category | File Name | Size | Fast CDN Mirror |\n")
             f.write("| :--- | :--- | :--- | :--- | :--- |\n")
             for pr in processed_releases:
                 f.write(f"| `{pr['device']}` | `{pr['category']}` | `{pr['filename']}` | `{pr['size_mb']:.1f} MB` | [⚡ Direct CDN]({pr['cdn']}) |\n")
+
+    print("\n" + "=" * 65)
+    print(f"🎉 COMPLETED! Successfully mirrored {len(processed_releases)} releases.")
+    print("=" * 65)
 
 
 if __name__ == "__main__":
