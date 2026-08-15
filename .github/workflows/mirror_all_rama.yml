@@ -11,7 +11,7 @@ on:
 
 jobs:
   parallel_shard_mirror:
-    name: "Worker Shard ${{ matrix.shard + 1 }}/8"
+    name: "Worker Shard ${{ matrix.shard }}/8"
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       max-parallel: 8
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -42,13 +42,13 @@ jobs:
           chmod 600 ~/.ssh/id_sf
           ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts
 
-      - name: Execute Distributed Mirror for Shard ${{ matrix.shard + 1 }}
+      - name: Execute Distributed Mirror for Shard ${{ matrix.shard }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PROJECT: ${{ secrets.SF_PROJECT }}
           SOURCE_PROJECT: ${{ inputs.source_project }}
-          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_NUM: ${{ matrix.shard }}
           TOTAL_SHARDS: "8"
         run: |
           python scripts/run_cloud_mirror.py
