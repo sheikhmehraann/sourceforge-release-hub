@@ -21,11 +21,11 @@ on:
         required: false
         type: choice
         options:
-          - rama982_style
+          - transsion_firmware
           - android_device
           - software_hub
           - firmware_dump
-        default: "rama982_style"
+        default: "transsion_firmware"
       device_name:
         description: "Device codename (e.g. X6871)"
         required: false

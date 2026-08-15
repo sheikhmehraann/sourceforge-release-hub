@@ -14,7 +14,7 @@ class FolderManager:
     """Manages SourceForge project folder structures and layouts."""
 
     DEFAULT_PRESETS = {
-        "rama982_style": [
+        "transsion_firmware": [
             "FLASHABLE",
             "RECOVERY/{device}",
             "RECOVERY/{device}/XOS15",
