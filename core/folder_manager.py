@@ -14,6 +14,27 @@ class FolderManager:
     """Manages SourceForge project folder structures and layouts."""
 
     DEFAULT_PRESETS = {
+        "logical_hub": [
+            "Devices/Infinix-GT-20-Pro-X6871/Flashable-ROMs",
+            "Devices/Infinix-GT-20-Pro-X6871/Recovery-Images",
+            "Devices/Infinix-GT-20-Pro-X6871/Stock-Images",
+            "Devices/Infinix-GT-20-Pro-X6871/Official-Firmware",
+            "Devices/Infinix-Hot-50-Pro-X6886/Flashable-ROMs",
+            "Devices/Infinix-Zero-40-5G-X6880/Flashable-ROMs",
+            "Devices/Infinix-Note-40-Pro-X6850/Flashable-ROMs",
+            "Custom-ROMs",
+            "Custom-Recoveries/OrangeFox",
+            "Custom-Recoveries/TWRP",
+            "Custom-Kernels/Linux-5.10",
+            "Custom-Kernels/Linux-6.1",
+            "Custom-Kernels/Linux-6.6",
+            "Stock-Firmware/Boot-Images",
+            "Stock-Firmware/Factory-Fastboot",
+            "OTA-Payloads/Partition-Dumps",
+            "Porting-Files/Vendor64",
+            "Tools-and-Utilities/Flashable-Engine",
+            "Tools-and-Utilities/AVB-Patcher"
+        ],
         "transsion_firmware": [
             "FLASHABLE",
             "RECOVERY/{device}",

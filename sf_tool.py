@@ -221,7 +221,7 @@ def main():
 
     # preset
     p_preset = subparsers.add_parser("preset", help="Create folder hierarchy from preset")
-    p_preset.add_argument("name", choices=["transsion_firmware", "android_device", "software_hub", "firmware_dump"], help="Preset template name")
+    p_preset.add_argument("name", choices=["logical_hub", "transsion_firmware", "android_device", "software_hub", "firmware_dump"], help="Preset template name")
     p_preset.add_argument("--device", "-d", default="X6871", help="Device codename (default: X6871)")
     p_preset.add_argument("--brand", "-b", default="Infinix", help="Brand name (default: Infinix)")
     p_preset.add_argument("--model", "-m", default="GT20Pro", help="Model name (default: GT20Pro)")
