@@ -1,0 +1,74 @@
+name: SourceForge Remote Folder Organizer
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action to perform (mkdir, clean_folder, create_preset)"
+        required: true
+        type: choice
+        options:
+          - mkdir
+          - create_preset
+          - set_readme
+        default: "mkdir"
+      target_folder:
+        description: "Folder path (e.g. X6871/ROMs or Tools/Windows)"
+        required: true
+        type: string
+      preset_type:
+        description: "Preset type (only if action is create_preset)"
+        required: false
+        type: choice
+        options:
+          - android_device
+          - software_hub
+          - firmware_dump
+        default: "android_device"
+      device_name:
+        description: "Device codename (e.g. X6871)"
+        required: false
+        type: string
+        default: "X6871"
+
+jobs:
+  organize_folders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SF_SSH_KEY }}" > ~/.ssh/id_sf
+          chmod 600 ~/.ssh/id_sf
+          ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts
+
+      - name: Execute Folder Action
+        env:
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PROJECT: ${{ secrets.SF_PROJECT }}
+          SF_KEY_PATH: ~/.ssh/id_sf
+        run: |
+          ACTION="${{ inputs.action }}"
+          if [ "$ACTION" = "mkdir" ]; then
+            python sf_tool.py mkdir "${{ inputs.target_folder }}"
+          elif [ "$ACTION" = "create_preset" ]; then
+            python sf_tool.py preset "${{ inputs.preset_type }}" --device "${{ inputs.device_name }}"
+          elif [ "$ACTION" = "set_readme" ]; then
+            python sf_tool.py mkdir "${{ inputs.target_folder }}"
+          fi
+
+          echo "### 📁 SourceForge Folder Management Action Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action:** \`$ACTION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target:** \`${{ inputs.target_folder }}\`" >> $GITHUB_STEP_SUMMARY

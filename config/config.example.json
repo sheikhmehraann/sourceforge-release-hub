@@ -1,0 +1,26 @@
+{
+  "project": "your-sourceforge-project-name",
+  "username": "your-sourceforge-username",
+  "default_remote_base": "/home/frs/project",
+  "folder_presets": {
+    "device_roms": [
+      "{device_codename}/ROMs",
+      "{device_codename}/Recovery",
+      "{device_codename}/Firmware",
+      "{device_codename}/Vendor_Boot",
+      "{device_codename}/Tools"
+    ],
+    "software_releases": [
+      "Releases/Windows",
+      "Releases/Linux",
+      "Releases/Android",
+      "Changelogs"
+    ]
+  },
+  "upload_settings": {
+    "chunk_size_mb": 16,
+    "max_retries": 5,
+    "generate_checksums": true,
+    "notify_on_complete": true
+  }
+}

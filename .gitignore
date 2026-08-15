@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Secrets and environment
+.env
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+secrets.json
+
+# Build & Downloads
+output/
+dist/
+build/
+*.egg-info/
+downloads/
+temp/
+*.tmp
+*.zip
+*.tar.gz
+*.7z
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo

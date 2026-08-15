@@ -1,0 +1,37 @@
+name: CI Tests & Syntax Validation
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Syntax Check All Python Scripts
+        run: |
+          python -m py_compile sf_tool.py core/*.py
+
+      - name: Test CLI Help Menu
+        run: |
+          python sf_tool.py --help
+          python sf_tool.py list --help
+          python sf_tool.py mkdir --help
+          python sf_tool.py preset --help
+          python sf_tool.py upload --help
+          python sf_tool.py cloud-upload --help
+          python sf_tool.py setup-secrets --help

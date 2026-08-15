@@ -1,0 +1,7 @@
+# SourceForge Release Hub & Cloud Sync Requirements
+paramiko>=3.4.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+rich>=13.7.0
+urllib3>=2.0.0
+tqdm>=4.66.0

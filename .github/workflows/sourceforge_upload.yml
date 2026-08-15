@@ -1,0 +1,131 @@
+name: SourceForge Cloud Uploader
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_url:
+        description: "Direct URL of file to download (Gofile, Google Drive, Direct Link, etc.)"
+        required: true
+        type: string
+      folder_path:
+        description: "Target folder path on SourceForge (e.g., X6871/ROMs or Tools/Windows)"
+        required: true
+        type: string
+        default: "ROMs"
+      project_name:
+        description: "SourceForge Project UNIX Name (defaults to secret SF_PROJECT if empty)"
+        required: false
+        type: string
+      release_notes:
+        description: "Optional Release Notes / Description for the folder"
+        required: false
+        type: string
+
+jobs:
+  cloud_transfer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies (aria2, rsync, openssh)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 rsync openssh-client
+
+      - name: Determine Project Name
+        id: project_info
+        run: |
+          PROJ="${{ inputs.project_name }}"
+          if [ -z "$PROJ" ]; then
+            PROJ="${{ secrets.SF_PROJECT }}"
+          fi
+          if [ -z "$PROJ" ]; then
+            echo "Error: SourceForge project name is missing!"
+            exit 1
+          fi
+          echo "PROJECT_NAME=$PROJ" >> $GITHUB_ENV
+          echo "Using SourceForge Project: $PROJ"
+
+      - name: Download File at Cloud Speed
+        id: download_step
+        run: |
+          mkdir -p downloads
+          cd downloads
+
+          URL="${{ inputs.file_url }}"
+          echo "Downloading from: $URL"
+
+          # Use aria2c for multi-connection fast download
+          aria2c -x 16 -s 16 -k 1M --check-certificate=false "$URL" || wget --no-check-certificate "$URL" || curl -LO "$URL"
+
+          # Identify downloaded file
+          DOWNLOADED_FILE=$(ls -t | head -n 1)
+          if [ -z "$DOWNLOADED_FILE" ]; then
+            echo "Error: No file downloaded!"
+            exit 1
+          fi
+
+          echo "FILE_NAME=$DOWNLOADED_FILE" >> $GITHUB_ENV
+          FILE_SIZE=$(stat -c%s "$DOWNLOADED_FILE")
+          echo "FILE_SIZE_HUMAN=$(numfmt --to=iec-i --suffix=B $FILE_SIZE)" >> $GITHUB_ENV
+          
+          # Calculate Checksums
+          MD5_VAL=$(md5sum "$DOWNLOADED_FILE" | awk '{print $1}')
+          SHA256_VAL=$(sha256sum "$DOWNLOADED_FILE" | awk '{print $1}')
+          echo "MD5_VAL=$MD5_VAL" >> $GITHUB_ENV
+          echo "SHA256_VAL=$SHA256_VAL" >> $GITHUB_ENV
+
+          echo "Downloaded: $DOWNLOADED_FILE ($FILE_SIZE bytes)"
+          echo "MD5: $MD5_VAL"
+          echo "SHA256: $SHA256_VAL"
+
+      - name: Setup SSH Authentication for SourceForge
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SF_SSH_KEY }}" > ~/.ssh/id_sf
+          chmod 600 ~/.ssh/id_sf
+          ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts
+
+      - name: Create Remote Directory Structure on SourceForge
+        run: |
+          CLEAN_FOLDER=$(echo "${{ inputs.folder_path }}" | sed 's/^[ \t\/]*//;s/[ \t\/]*$//')
+          SF_USER="${{ secrets.SF_USERNAME }}"
+          REMOTE_ROOT="/home/frs/project/$PROJECT_NAME"
+          TARGET_DIR="$REMOTE_ROOT/$CLEAN_FOLDER"
+
+          echo "Ensuring remote directory: $TARGET_DIR"
+          ssh -i ~/.ssh/id_sf "$SF_USER@frs.sourceforge.net" "mkdir -p '$TARGET_DIR'"
+
+      - name: High-Speed RSYNC Upload to SourceForge
+        run: |
+          CLEAN_FOLDER=$(echo "${{ inputs.folder_path }}" | sed 's/^[ \t\/]*//;s/[ \t\/]*$//')
+          SF_USER="${{ secrets.SF_USERNAME }}"
+          REMOTE_ROOT="/home/frs/project/$PROJECT_NAME"
+          TARGET_DIR="$REMOTE_ROOT/$CLEAN_FOLDER/"
+
+          echo "Uploading downloads/$FILE_NAME to $SF_USER@frs.sourceforge.net:$TARGET_DIR"
+          rsync -avP -e "ssh -i ~/.ssh/id_sf -o StrictHostKeyChecking=no" "downloads/$FILE_NAME" "$SF_USER@frs.sourceforge.net:$TARGET_DIR"
+
+      - name: Generate Direct Download Links & Job Summary
+        run: |
+          CLEAN_FOLDER=$(echo "${{ inputs.folder_path }}" | sed 's/^[ \t\/]*//;s/[ \t\/]*$//')
+          if [ -z "$CLEAN_FOLDER" ]; then
+            REL_PATH="$FILE_NAME"
+          else
+            REL_PATH="$CLEAN_FOLDER/$FILE_NAME"
+          fi
+
+          DOWNLOAD_PAGE="https://sourceforge.net/projects/$PROJECT_NAME/files/$REL_PATH/download"
+          DIRECT_MIRROR="https://downloads.sourceforge.net/project/$PROJECT_NAME/$REL_PATH"
+
+          echo "### 🚀 SourceForge Cloud Upload Succeeded!" >> $GITHUB_STEP_SUMMARY
+          echo "- **File Name:** \`$FILE_NAME\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size:** \`$FILE_SIZE_HUMAN\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **MD5:** \`$MD5_VAL\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **SHA256:** \`$SHA256_VAL\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Folder:** \`/$PROJECT_NAME/$CLEAN_FOLDER\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 **Download Links:**" >> $GITHUB_STEP_SUMMARY
+          echo "- [SourceForge Download Page]($DOWNLOAD_PAGE)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Direct Fast CDN Mirror]($DIRECT_MIRROR)" >> $GITHUB_STEP_SUMMARY

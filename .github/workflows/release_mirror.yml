@@ -1,0 +1,63 @@
+name: Mirror GitHub Release to SourceForge
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to mirror (e.g. v1.0.0)"
+        required: true
+        type: string
+
+jobs:
+  mirror_release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install System Utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync openssh-client curl jq
+
+      - name: Setup SSH Authentication for SourceForge
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SF_SSH_KEY }}" > ~/.ssh/id_sf
+          chmod 600 ~/.ssh/id_sf
+          ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts
+
+      - name: Fetch Release Assets & Mirror
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SF_USER: ${{ secrets.SF_USERNAME }}
+          PROJECT_NAME: ${{ secrets.SF_PROJECT }}
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag_name }}"
+          echo "Mirroring release tag: $TAG"
+
+          mkdir -p release_assets
+          cd release_assets
+
+          # Download all assets from GitHub Release via gh CLI
+          gh release download "$TAG" --repo "${{ github.repository }}" || true
+
+          COUNT=$(ls -1 | wc -l)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No binaries found in release $TAG. Nothing to mirror."
+            exit 0
+          fi
+
+          echo "Found $COUNT file(s) to mirror to SourceForge."
+
+          # Create remote folder on SourceForge
+          REMOTE_DIR="/home/frs/project/$PROJECT_NAME/Releases/$TAG"
+          ssh -i ~/.ssh/id_sf "$SF_USER@frs.sourceforge.net" "mkdir -p '$REMOTE_DIR'"
+
+          # RSYNC files
+          rsync -avP -e "ssh -i ~/.ssh/id_sf -o StrictHostKeyChecking=no" ./ "$SF_USER@frs.sourceforge.net:$REMOTE_DIR/"
+
+          echo "### 📦 Mirrored GitHub Release $TAG to SourceForge!" >> $GITHUB_STEP_SUMMARY
+          echo "SourceForge Folder: \`Releases/$TAG\`" >> $GITHUB_STEP_SUMMARY
