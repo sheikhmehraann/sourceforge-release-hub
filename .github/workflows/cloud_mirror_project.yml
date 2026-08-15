@@ -12,7 +12,7 @@ on:
         description: "Filter by Device (e.g. X6871, X6886, or ALL)"
         required: false
         type: string
-        default: "X6871"
+        default: "ALL"
       category_filter:
         description: "Filter by Category (Flashable-ROMs, Custom-Recoveries, Custom-Kernels, Stock-Images, or ALL)"
         required: false
@@ -22,7 +22,7 @@ on:
         description: "Max files to process in this run"
         required: false
         type: string
-        default: "5"
+        default: "150"
 
 jobs:
   cloud_sync:

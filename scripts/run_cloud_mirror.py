@@ -90,10 +90,10 @@ def main():
         print(f"[*] Ensuring remote directory: {remote_dir}")
         subprocess.run(["ssh", "-i", os.path.expanduser("~/.ssh/id_sf"), "-o", "StrictHostKeyChecking=no", f"{sf_user}@frs.sourceforge.net", f"mkdir -p '{remote_dir}'"], check=False)
 
-        # RSYNC to SourceForge FRS
+        # RSYNC to SourceForge FRS (with --ignore-existing to skip files already uploaded)
         print(f"[*] Uploading to SourceForge FRS mirror...")
         rsync_cmd = [
-            "rsync", "-avP",
+            "rsync", "-avP", "--ignore-existing",
             "-e", f"ssh -i {os.path.expanduser('~/.ssh/id_sf')} -o StrictHostKeyChecking=no",
             str(local_file),
             f"{sf_user}@frs.sourceforge.net:{remote_dir}/"
