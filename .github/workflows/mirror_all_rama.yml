@@ -1,4 +1,4 @@
-name: Ultra-Fast Parallel Cloud Mirror Engine
+name: Ultra-Fast Distributed Cloud Mirror Engine
 
 on:
   workflow_dispatch:
@@ -8,29 +8,18 @@ on:
         required: true
         type: string
         default: "rama982"
-      device_filter:
-        description: "Filter Device (e.g. ALL or X6871)"
-        required: false
-        type: string
-        default: "ALL"
 
 jobs:
-  parallel_mirror:
-    name: "Sync ${{ matrix.category }}"
+  parallel_shard_mirror:
+    name: "Worker Shard ${{ matrix.shard + 1 }}/8"
     runs-on: ubuntu-latest
     permissions:
       contents: write
     strategy:
       fail-fast: false
-      max-parallel: 6
+      max-parallel: 8
       matrix:
-        category:
-          - "Custom-Recoveries"
-          - "Custom-Kernels"
-          - "Stock-Images"
-          - "OTA-Payloads"
-          - "Stock-Firmware"
-          - "Porting-Files"
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -53,14 +42,13 @@ jobs:
           chmod 600 ~/.ssh/id_sf
           ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts
 
-      - name: Execute Parallel Mirror for ${{ matrix.category }}
+      - name: Execute Distributed Mirror for Shard ${{ matrix.shard + 1 }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PROJECT: ${{ secrets.SF_PROJECT }}
           SOURCE_PROJECT: ${{ inputs.source_project }}
-          DEVICE_FILTER: ${{ inputs.device_filter }}
-          CATEGORY_FILTER: ${{ matrix.category }}
-          MAX_FILES: "150"
+          SHARD_INDEX: ${{ matrix.shard }}
+          TOTAL_SHARDS: "8"
         run: |
           python scripts/run_cloud_mirror.py
