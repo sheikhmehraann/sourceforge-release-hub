@@ -1,0 +1,241 @@
+name: Fast Cloud Release & SourceForge Mirror Hub
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_url:
+        description: "Direct URL of file to fetch (Gofile, Google Drive, direct link)"
+        required: true
+        type: string
+      category:
+        description: "Release Category"
+        required: true
+        type: choice
+        options:
+          - FLASHABLE
+          - RECOVERY
+          - KERNEL
+          - STOCK-IMAGE
+          - OTA-EXTRACT
+          - PORT
+          - PORT-FILES
+          - OFFICIAL-FW
+          - TOOLS
+        default: "FLASHABLE"
+      device:
+        description: "Device Codename (e.g., X6871, X6886, Universal)"
+        required: true
+        type: string
+        default: "X6871"
+      subfolder:
+        description: "Optional subfolder (e.g. XOS15, 6.6, BOOT - leave blank for default)"
+        required: false
+        type: string
+        default: ""
+      release_tag:
+        description: "GitHub Release Tag (e.g. v1.0.0-X6871, leave empty for auto-date tag)"
+        required: false
+        type: string
+        default: ""
+      release_title:
+        description: "Release Title for GitHub"
+        required: false
+        type: string
+        default: ""
+      changelog:
+        description: "Changelog / Notes"
+        required: false
+        type: string
+        default: "Initial high-speed release mirrored via SourceForge Release Hub."
+
+permissions:
+  contents: write
+
+jobs:
+  cloud_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install High-Performance Network Utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 rsync openssh-client curl jq
+
+      - name: Set Project Environment
+        run: |
+          PROJ="${{ secrets.SF_PROJECT }}"
+          if [ -z "$PROJ" ]; then
+            PROJ="mehraann19"
+          fi
+          echo "PROJECT_NAME=$PROJ" >> $GITHUB_ENV
+          echo "SF_USER=${{ secrets.SF_USERNAME }}" >> $GITHUB_ENV
+
+      - name: Download File at Cloud Datacenter Speed (Aria2 Multi-Connection)
+        id: download
+        run: |
+          mkdir -p workspace_downloads
+          cd workspace_downloads
+
+          URL="${{ inputs.file_url }}"
+          echo "Fetching from: $URL"
+
+          # 16-connection multi-segmented download
+          aria2c -x 16 -s 16 -k 1M --check-certificate=false "$URL" || wget --no-check-certificate "$URL" || curl -LO "$URL"
+
+          DOWNLOADED_FILE=$(ls -t | head -n 1)
+          if [ -z "$DOWNLOADED_FILE" ]; then
+            echo "Error: Download failed!"
+            exit 1
+          fi
+
+          echo "FILE_NAME=$DOWNLOADED_FILE" >> $GITHUB_ENV
+          FILE_SIZE=$(stat -c%s "$DOWNLOADED_FILE")
+          echo "FILE_SIZE_BYTES=$FILE_SIZE" >> $GITHUB_ENV
+          echo "FILE_SIZE_HUMAN=$(numfmt --to=iec-i --suffix=B $FILE_SIZE)" >> $GITHUB_ENV
+
+          # Calculate cryptographic hashes
+          echo "MD5_VAL=$(md5sum "$DOWNLOADED_FILE" | awk '{print $1}')" >> $GITHUB_ENV
+          echo "SHA1_VAL=$(sha1sum "$DOWNLOADED_FILE" | awk '{print $1}')" >> $GITHUB_ENV
+          echo "SHA256_VAL=$(sha256sum "$DOWNLOADED_FILE" | awk '{print $1}')" >> $GITHUB_ENV
+
+      - name: Determine Logical Folder Hierarchy
+        id: folder_logic
+        run: |
+          CAT="${{ inputs.category }}"
+          DEV="${{ inputs.device }}"
+          SUB="${{ inputs.subfolder }}"
+
+          # Build logical path
+          if [ "$DEV" = "Universal" ] || [ -z "$DEV" ]; then
+            if [ -n "$SUB" ]; then
+              REMOTE_SUBPATH="$CAT/$SUB"
+            else
+              REMOTE_SUBPATH="$CAT"
+            fi
+          else
+            if [ -n "$SUB" ]; then
+              REMOTE_SUBPATH="$CAT/$DEV/$SUB"
+            else
+              REMOTE_SUBPATH="$CAT/$DEV"
+            fi
+          fi
+
+          echo "REMOTE_SUBPATH=$REMOTE_SUBPATH" >> $GITHUB_ENV
+          echo "Full Logical Path: /$PROJECT_NAME/$REMOTE_SUBPATH/$FILE_NAME"
+
+      - name: Setup Secure SSH Key for SourceForge FRS
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SF_SSH_KEY }}" > ~/.ssh/id_sf
+          chmod 600 ~/.ssh/id_sf
+          ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts
+
+      - name: Ensure Remote Directory Exists on SourceForge
+        run: |
+          REMOTE_DIR="/home/frs/project/$PROJECT_NAME/$REMOTE_SUBPATH"
+          echo "Ensuring remote directory: $REMOTE_DIR"
+          ssh -i ~/.ssh/id_sf "$SF_USER@frs.sourceforge.net" "mkdir -p '$REMOTE_DIR'"
+
+      - name: Upload to SourceForge Global Mirror Network (rsync)
+        run: |
+          REMOTE_DIR="/home/frs/project/$PROJECT_NAME/$REMOTE_SUBPATH/"
+          echo "Uploading $FILE_NAME to $SF_USER@frs.sourceforge.net:$REMOTE_DIR"
+          rsync -avP -e "ssh -i ~/.ssh/id_sf -o StrictHostKeyChecking=no" "workspace_downloads/$FILE_NAME" "$SF_USER@frs.sourceforge.net:$REMOTE_DIR"
+
+      - name: Generate Direct CDN Mirrors & Fast Links
+        id: generate_urls
+        run: |
+          DIRECT_CDN="https://downloads.sourceforge.net/project/$PROJECT_NAME/$REMOTE_SUBPATH/$FILE_NAME"
+          SF_DOWNLOAD_PAGE="https://sourceforge.net/projects/$PROJECT_NAME/files/$REMOTE_SUBPATH/$FILE_NAME/download"
+          SF_FOLDER_PAGE="https://sourceforge.net/projects/$PROJECT_NAME/files/$REMOTE_SUBPATH/"
+
+          echo "DIRECT_CDN=$DIRECT_CDN" >> $GITHUB_ENV
+          echo "SF_DOWNLOAD_PAGE=$SF_DOWNLOAD_PAGE" >> $GITHUB_ENV
+          echo "SF_FOLDER_PAGE=$SF_FOLDER_PAGE" >> $GITHUB_ENV
+
+          # Generate Windows .url shortcut
+          mkdir -p release_assets
+          cat <<EOF > "release_assets/Download-${FILE_NAME}.url"
+[InternetShortcut]
+URL=$DIRECT_CDN
+EOF
+
+      - name: Determine Release Tag & Title
+        id: tag_info
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ inputs.device }}-$(date +'%Y%m%d-%H%M')"
+          fi
+          echo "FINAL_TAG=$TAG" >> $GITHUB_ENV
+
+          TITLE="${{ inputs.release_title }}"
+          if [ -z "$TITLE" ]; then
+            TITLE="[${{ inputs.device }}] ${{ inputs.category }} - $FILE_NAME"
+          fi
+          echo "FINAL_TITLE=$TITLE" >> $GITHUB_ENV
+
+      - name: Publish Official GitHub Release with SourceForge CDN Links
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Construct rich Release Body
+          cat <<EOF > release_body.md
+## 🚀 $FINAL_TITLE
+
+High-speed release distribution powered by **SourceForge Global Mirror Network** & **GitHub Cloud Infrastructure**.
+
+---
+
+### ⚡ Fast Download Mirrors
+
+| Mirror Server | Location / CDN | Direct Link |
+| :--- | :--- | :--- |
+| ⚡ **Primary Fast CDN** | Global Edge (Auto-Nearest Server) | [🚀 **Direct Download ($FILE_SIZE_HUMAN)**]($DIRECT_CDN) |
+| 🌐 **SourceForge Browser Mirror** | Multi-Region Mirrors | [🔗 **SourceForge Download Page**]($SF_DOWNLOAD_PAGE) |
+| 📁 **Browse Folder Directory** | SourceForge FRS | [📂 **View All Files**]($SF_FOLDER_PAGE) |
+
+---
+
+### 📱 Package Details
+
+- **Device Target:** \`${{ inputs.device }}\`
+- **Category:** \`${{ inputs.category }}\`
+- **File Name:** \`$FILE_NAME\`
+- **File Size:** \`$FILE_SIZE_HUMAN\` (\`$FILE_SIZE_BYTES\` bytes)
+- **SourceForge Path:** \`/$PROJECT_NAME/$REMOTE_SUBPATH/\`
+
+### 🛡️ Cryptographic Integrity Checksums
+
+\`\`\`text
+MD5:    $MD5_VAL
+SHA1:   $SHA1_VAL
+SHA256: $SHA256_VAL
+\`\`\`
+
+---
+
+### 📝 Changelog & Release Notes
+
+${{ inputs.changelog }}
+
+---
+
+*Maintained by [@${{ github.repository_owner }}](https://github.com/${{ github.repository_owner }}) · Mirror Hosted on [SourceForge](https://sourceforge.net/projects/$PROJECT_NAME)*
+EOF
+
+          # Create release using GitHub CLI
+          gh release create "$FINAL_TAG" \
+            --title "$FINAL_TITLE" \
+            --notes-file release_body.md \
+            release_assets/*
+
+      - name: Output Job Summary
+        run: |
+          echo "### 🌟 Release Successfully Published & Mirrored!" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub Release Tag:** \`$FINAL_TAG\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **File:** \`$FILE_NAME\` (\`$FILE_SIZE_HUMAN\`)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Direct CDN Speed Link:** [$DIRECT_CDN]($DIRECT_CDN)" >> $GITHUB_STEP_SUMMARY
+          echo "- **SourceForge Page:** [$SF_DOWNLOAD_PAGE]($SF_DOWNLOAD_PAGE)" >> $GITHUB_STEP_SUMMARY

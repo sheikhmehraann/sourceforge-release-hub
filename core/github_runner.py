@@ -62,6 +62,58 @@ class GitHubRunner:
             print(f"[-] Failed to dispatch workflow: {e.stderr}")
             return False
 
+    def trigger_cloud_publish(
+        self,
+        file_url: str,
+        category: str = "FLASHABLE",
+        device: str = "X6871",
+        subfolder: str = "",
+        release_tag: str = "",
+        release_title: str = "",
+        changelog: str = ""
+    ) -> bool:
+        """
+        Dispatches the `cloud_publish.yml` workflow on GitHub Actions.
+        Downloads file at multi-gigabit speeds, uploads to SourceForge, and creates a GitHub Release
+        with direct fast CDN mirror links!
+        """
+        if not self.is_gh_installed():
+            print("[-] GitHub CLI (`gh`) is not installed or not in PATH.")
+            return False
+
+        cmd = [
+            "gh", "workflow", "run", "cloud_publish.yml",
+            "--repo", self.repo_name,
+            "-f", f"file_url={file_url}",
+            "-f", f"category={category}",
+            "-f", f"device={device}"
+        ]
+
+        if subfolder:
+            cmd.extend(["-f", f"subfolder={subfolder}"])
+        if release_tag:
+            cmd.extend(["-f", f"release_tag={release_tag}"])
+        if release_title:
+            cmd.extend(["-f", f"release_title={release_title}"])
+        if changelog:
+            cmd.extend(["-f", f"changelog={changelog}"])
+
+        print(f"[*] Dispatching Dual Cloud Publish to GitHub Actions ({self.repo_name})...")
+        print(f"    Target Category: {category}")
+        print(f"    Device: {device}")
+        print(f"    Source URL: {file_url}")
+
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            print("[+] Dual Cloud Publish workflow started on GitHub servers!")
+            print(res.stdout)
+            print("[i] The runner will upload to SourceForge and create a GitHub Release with fast CDN mirrors.")
+            print("[i] Run `python sf_tool.py cloud-status` to monitor live progress.")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"[-] Failed to dispatch workflow: {e.stderr}")
+            return False
+
     def list_runs(self, limit: int = 5):
         """Lists recent workflow runs for this repository."""
         if not self.is_gh_installed():

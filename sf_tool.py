@@ -137,6 +137,22 @@ def cmd_cloud_upload(args):
         sys.exit(1)
 
 
+def cmd_publish(args):
+    """Dual Cloud Publish: Downloads file, uploads to SourceForge, and creates GitHub Release with CDN mirrors."""
+    runner = GitHubRunner(repo_name=args.repo)
+    success = runner.trigger_cloud_publish(
+        file_url=args.url,
+        category=args.category,
+        device=args.device,
+        subfolder=args.subfolder or "",
+        release_tag=args.tag or "",
+        release_title=args.title or "",
+        changelog=args.notes or "Initial high-speed release mirrored via SourceForge Release Hub."
+    )
+    if not success:
+        sys.exit(1)
+
+
 def cmd_cloud_status(args):
     """Check status of GitHub Actions cloud jobs."""
     runner = GitHubRunner(repo_name=args.repo)
@@ -222,6 +238,17 @@ def main():
     p_cloud.add_argument("--notes", "-n", default="", help="Release notes / description")
     p_cloud.add_argument("--repo", default="sheikhmehraann/sourceforge-release-hub", help="GitHub repository name")
 
+    # publish (Dual Cloud Publish + GitHub Release with Fast CDN Mirrors)
+    p_pub = subparsers.add_parser("publish", help="Download in cloud, upload to SourceForge, and create GitHub Release with Fast CDN links")
+    p_pub.add_argument("url", help="Direct URL to download (Gofile, Google Drive, direct link)")
+    p_pub.add_argument("--category", "-c", choices=["FLASHABLE", "RECOVERY", "KERNEL", "STOCK-IMAGE", "OTA-EXTRACT", "PORT", "PORT-FILES", "OFFICIAL-FW", "TOOLS"], default="FLASHABLE", help="Release Category")
+    p_pub.add_argument("--device", "-d", default="X6871", help="Device Codename (default: X6871)")
+    p_pub.add_argument("--subfolder", "-s", default="", help="Optional subfolder (e.g. XOS15, 6.6, BOOT)")
+    p_pub.add_argument("--tag", "-t", default="", help="Release Tag (e.g. v1.0.0-X6871)")
+    p_pub.add_argument("--title", default="", help="GitHub Release Title")
+    p_pub.add_argument("--notes", "-n", default="", help="Changelog / Release Notes")
+    p_pub.add_argument("--repo", default="sheikhmehraann/sourceforge-release-hub", help="GitHub repository name")
+
     # cloud-status
     p_status = subparsers.add_parser("cloud-status", help="Check GitHub Actions cloud jobs")
     p_status.add_argument("--repo", default="sheikhmehraann/sourceforge-release-hub", help="GitHub repo")
@@ -243,6 +270,7 @@ def main():
         "preset": cmd_preset,
         "upload": cmd_upload,
         "cloud-upload": cmd_cloud_upload,
+        "publish": cmd_publish,
         "cloud-status": cmd_cloud_status,
         "setup-secrets": cmd_setup_secrets,
         "stats": cmd_stats,
