@@ -1,64 +1,65 @@
-name: Mirror All Projects to SourceForge & GitHub
+name: Ultra-Fast Parallel Cloud Mirror Engine
 
 on:
   workflow_dispatch:
     inputs:
       source_project:
-        description: "Source Project UNIX Name"
+        description: "Source Project UNIX Name (e.g. rama982)"
         required: true
         type: string
         default: "rama982"
       device_filter:
-        description: "Filter Device (e.g. X6871, X6886, or ALL)"
+        description: "Filter Device (e.g. ALL or X6871)"
         required: false
         type: string
         default: "ALL"
-      category_filter:
-        description: "Filter Category (Flashable-ROMs, Custom-Recoveries, Custom-Kernels, Stock-Images, or ALL)"
-        required: false
-        type: string
-        default: "ALL"
-      max_files:
-        description: "Max files to process in this run"
-        required: false
-        type: string
-        default: "150"
 
 jobs:
-  mirror_and_publish:
+  parallel_mirror:
+    name: "Sync ${{ matrix.category }}"
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        category:
+          - "Custom-Recoveries"
+          - "Custom-Kernels"
+          - "Stock-Images"
+          - "OTA-Payloads"
+          - "Stock-Firmware,Porting-Files"
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Python Environment
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install System Utilities (aria2, rsync, openssh)
+      - name: Install Cloud Transfer Utilities
         run: |
           sudo apt-get update
           sudo apt-get install -y aria2 rsync openssh-client curl jq
           pip install -r requirements.txt
 
-      - name: Setup SSH Key for SourceForge FRS
+      - name: Configure SourceForge SSH Key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SF_SSH_KEY }}" > ~/.ssh/id_sf
           chmod 600 ~/.ssh/id_sf
           ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts
 
-      - name: Run High-Speed Cloud Mirror Pipeline
+      - name: Execute Parallel Mirror for ${{ matrix.category }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PROJECT: ${{ secrets.SF_PROJECT }}
           SOURCE_PROJECT: ${{ inputs.source_project }}
           DEVICE_FILTER: ${{ inputs.device_filter }}
-          CATEGORY_FILTER: ${{ inputs.category_filter }}
-          MAX_FILES: ${{ inputs.max_files }}
+          CATEGORY_FILTER: ${{ matrix.category }}
+          MAX_FILES: "100"
         run: |
           python scripts/run_cloud_mirror.py
