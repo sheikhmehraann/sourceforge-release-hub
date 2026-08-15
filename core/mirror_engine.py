@@ -161,16 +161,15 @@ class CloudMirrorEngine:
     @staticmethod
     def get_source_project_files(project_name: str = "rama982") -> List[Dict[str, Any]]:
         """Parses public RSS feed for all available files."""
-        if not requests:
-            import urllib.request
-            url = f"https://sourceforge.net/projects/{project_name}/rss"
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                content = resp.read()
-        else:
-            url = f"https://sourceforge.net/projects/{project_name}/rss"
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
-            content = resp.content
+        import urllib.request
+        url = f"https://sourceforge.net/projects/{project_name}/rss?path=/"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        }
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            content = resp.read()
 
         root = ET.fromstring(content)
         items = []
@@ -181,19 +180,22 @@ class CloudMirrorEngine:
             enclosure = item.find("enclosure")
             size = int(enclosure.attrib.get("length", 0)) if enclosure is not None else 0
 
-            # Extract filename and relative path
-            clean_rel = link.replace(f"https://sourceforge.net/projects/{project_name}/files/", "")
-            filename = clean_rel.split("/")[-1].split("?")[0].split("&")[0]
+            # Extract clean relative path and filename from title
+            clean_rel = title.strip("/")
+            filename = clean_rel.split("/")[-1]
 
             if not filename or filename.endswith("/"):
                 continue
+
+            # Ensure direct fast download link
+            direct_src = f"https://downloads.sourceforge.net/project/{project_name}/{clean_rel}"
 
             mapped = CloudMirrorEngine.map_file_to_logical_path(filename, clean_rel)
 
             items.append({
                 "filename": filename,
                 "source_path": clean_rel,
-                "source_download_url": link,
+                "source_download_url": direct_src,
                 "size_bytes": size,
                 "pub_date": pub_date,
                 "target_folder": mapped["target_folder"],
