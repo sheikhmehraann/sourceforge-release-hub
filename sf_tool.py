@@ -68,9 +68,9 @@ def cmd_list(args):
                 return
             print(f"\nDirectory Contents of '/{subpath}':")
             for item in items:
-                icon = "📁 [DIR] " if item["is_dir"] else "📄 [FILE]"
+                icon = "[DIR] " if item["is_dir"] else "[FILE]"
                 size_str = f"({item['size'] / (1024*1024):.2f} MB)" if not item["is_dir"] else ""
-                print(f"  {icon:8} {item['name']} {size_str}")
+                print(f"  {icon:7} {item['name']} {size_str}")
 
 
 def cmd_mkdir(args):
@@ -98,7 +98,7 @@ def cmd_preset(args):
     created = fm.create_structure(args.name, vars_dict)
     print(f"[+] Successfully created {len(created)} folders:")
     for c in created:
-        print(f"  ✓ /{c}")
+        print(f"  [OK] /{c}")
 
 
 def cmd_upload(args):
@@ -113,7 +113,7 @@ def cmd_upload(args):
     with client:
         res = client.upload_file(str(local_path), remote_folder)
         print("\n=======================================================")
-        print("✅ UPLOAD SUMMARY")
+        print("[+] UPLOAD SUMMARY")
         print("=======================================================")
         print(f"File Name:      {res['filename']}")
         print(f"File Size:      {res['size'] / (1024*1024):.2f} MB")
@@ -171,15 +171,15 @@ def cmd_stats(args):
         return
 
     print("\n=======================================================")
-    print(f"📊 DOWNLOAD ANALYTICS ({stats['start_date']} to {stats['end_date']})")
+    print(f"[+] DOWNLOAD ANALYTICS ({stats['start_date']} to {stats['end_date']})")
     print("=======================================================")
     print(f"Total Downloads: {stats['total_downloads']:,}")
     print("\nTop Countries:")
     for country, count in stats["top_countries"]:
-        print(f"  • {country:15}: {count:,}")
+        print(f"  - {country:15}: {count:,}")
     print("\nTop Operating Systems:")
     for os_name, count in stats["top_os"]:
-        print(f"  • {os_name:15}: {count:,}")
+        print(f"  - {os_name:15}: {count:,}")
     print("=======================================================")
 
 
