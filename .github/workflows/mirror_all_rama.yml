@@ -22,14 +22,15 @@ jobs:
       contents: write
     strategy:
       fail-fast: false
-      max-parallel: 5
+      max-parallel: 6
       matrix:
         category:
           - "Custom-Recoveries"
           - "Custom-Kernels"
           - "Stock-Images"
           - "OTA-Payloads"
-          - "Stock-Firmware,Porting-Files"
+          - "Stock-Firmware"
+          - "Porting-Files"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -60,6 +61,6 @@ jobs:
           SOURCE_PROJECT: ${{ inputs.source_project }}
           DEVICE_FILTER: ${{ inputs.device_filter }}
           CATEGORY_FILTER: ${{ matrix.category }}
-          MAX_FILES: "100"
+          MAX_FILES: "150"
         run: |
           python scripts/run_cloud_mirror.py
