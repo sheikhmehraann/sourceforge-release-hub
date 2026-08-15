@@ -21,10 +21,11 @@ on:
         required: false
         type: choice
         options:
+          - rama982_style
           - android_device
           - software_hub
           - firmware_dump
-        default: "android_device"
+        default: "rama982_style"
       device_name:
         description: "Device codename (e.g. X6871)"
         required: false

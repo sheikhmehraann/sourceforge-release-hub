@@ -90,14 +90,14 @@ class GitHubRunner:
             ["gh", "secret", "set", "SF_USERNAME", "--repo", self.repo_name, "--body", sf_username],
             check=True
         )
-        print("  ✓ SF_USERNAME set")
+        print("  [OK] SF_USERNAME set")
 
         # 2. SF_PROJECT
         subprocess.run(
             ["gh", "secret", "set", "SF_PROJECT", "--repo", self.repo_name, "--body", sf_project],
             check=True
         )
-        print("  ✓ SF_PROJECT set")
+        print("  [OK] SF_PROJECT set")
 
         # 3. SF_SSH_KEY
         if sf_key_path and os.path.isfile(os.path.expanduser(sf_key_path)):
@@ -107,7 +107,7 @@ class GitHubRunner:
                 ["gh", "secret", "set", "SF_SSH_KEY", "--repo", self.repo_name, "--body", key_content],
                 check=True
             )
-            print("  ✓ SF_SSH_KEY set")
+            print("  [OK] SF_SSH_KEY set")
 
         # 4. SF_PASSWORD (optional)
         if sf_password:
@@ -115,7 +115,7 @@ class GitHubRunner:
                 ["gh", "secret", "set", "SF_PASSWORD", "--repo", self.repo_name, "--body", sf_password],
                 check=True
             )
-            print("  ✓ SF_PASSWORD set")
+            print("  [OK] SF_PASSWORD set")
 
         # 5. SF_API_KEY (optional)
         if sf_api_key:
@@ -123,7 +123,7 @@ class GitHubRunner:
                 ["gh", "secret", "set", "SF_API_KEY", "--repo", self.repo_name, "--body", sf_api_key],
                 check=True
             )
-            print("  ✓ SF_API_KEY set")
+            print("  [OK] SF_API_KEY set")
 
         print("[+] All GitHub Secrets configured successfully!")
         return True

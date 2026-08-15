@@ -205,10 +205,10 @@ def main():
 
     # preset
     p_preset = subparsers.add_parser("preset", help="Create folder hierarchy from preset")
-    p_preset.add_argument("name", choices=["android_device", "software_hub", "firmware_dump"], help="Preset template name")
-    p_preset.add_argument("--device", "-d", help="Device codename (e.g. X6871)")
-    p_preset.add_argument("--brand", "-b", help="Brand name (e.g. Infinix)")
-    p_preset.add_argument("--model", "-m", help="Model name (e.g. Note40Pro)")
+    p_preset.add_argument("name", choices=["rama982_style", "android_device", "software_hub", "firmware_dump"], help="Preset template name")
+    p_preset.add_argument("--device", "-d", default="X6871", help="Device codename (default: X6871)")
+    p_preset.add_argument("--brand", "-b", default="Infinix", help="Brand name (default: Infinix)")
+    p_preset.add_argument("--model", "-m", default="GT20Pro", help="Model name (default: GT20Pro)")
 
     # upload
     p_upload = subparsers.add_parser("upload", help="Upload a local file to SourceForge")

@@ -14,6 +14,24 @@ class FolderManager:
     """Manages SourceForge project folder structures and layouts."""
 
     DEFAULT_PRESETS = {
+        "rama982_style": [
+            "FLASHABLE",
+            "RECOVERY/{device}",
+            "RECOVERY/{device}/XOS15",
+            "KERNEL",
+            "KERNEL/5.10",
+            "KERNEL/6.1",
+            "KERNEL/6.6",
+            "STOCK-IMAGE/{device}",
+            "STOCK-IMAGE/{device}/BOOT",
+            "STOCK-IMAGE/BOOT-TRANSSION",
+            "OTA-EXTRACT",
+            "OTA-EXTRACT/pri_board",
+            "PORT",
+            "PORT-FILES",
+            "OFFICIAL-FW",
+            "TOOLS"
+        ],
         "android_device": [
             "{device}/ROMs",
             "{device}/Recovery",
