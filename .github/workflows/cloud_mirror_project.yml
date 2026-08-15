@@ -21,8 +21,8 @@ on:
       max_files:
         description: "Max files to process in this run"
         required: false
-        type: number
-        default: 5
+        type: string
+        default: "5"
 
 permissions:
   contents: write
