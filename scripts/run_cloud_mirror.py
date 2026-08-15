@@ -196,14 +196,16 @@ def main():
             file_size_mb = file_size / (1024 * 1024) if file_size else 0
 
         # Direct CDN Links
-        direct_cdn = f"https://downloads.sourceforge.net/project/{sf_project}/{target_folder}/{fname}"
-        sf_page = f"https://sourceforge.net/projects/{sf_project}/files/{target_folder}/{fname}/download"
+        import urllib.parse
+        encoded_fname = urllib.parse.quote(fname)
+        direct_cdn = f"https://downloads.sourceforge.net/project/{sf_project}/{target_folder}/{encoded_fname}"
+        sf_page = f"https://sourceforge.net/projects/{sf_project}/files/{target_folder}/{encoded_fname}/download"
         sf_folder_url = f"https://sourceforge.net/projects/{sf_project}/files/{target_folder}/"
 
         # Check if GitHub release already exists
         if release_tag not in existing_gh_tags:
-            # Create Shortcut file
-            shortcut_file = shortcut_dir / f"FastDownload-{fname}.url"
+            # Create Shortcut file with safe ascii filename
+            shortcut_file = shortcut_dir / f"FastDownload-{safe_name}.url"
             shortcut_file.write_text(f"[InternetShortcut]\nURL={direct_cdn}\n", encoding="utf-8")
 
             body = f"""## 🚀 {release_title}
