@@ -38,9 +38,47 @@ class CloudMirrorEngine:
     }
 
     @classmethod
-    def resolve_device(cls, filename: str) -> str:
-        """Extracts and maps device codename from filename."""
+    def resolve_device(cls, filename: str, original_path: str = "") -> str:
+        """Extracts and maps device codename from filename, prioritizing explicit target device names."""
         upper = filename.upper()
+        upper_path = original_path.upper()
+
+        # 1. Target device priority for ported ROMs
+        if "NOTE12" in upper or "X6728" in upper:
+            return "Infinix-Note-12-2023"
+        if "NOTE30" in upper or "X6853" in upper:
+            return "Infinix-Note-30-X6853"
+        if "NOTE40PROPLUS" in upper or "NOTE40PRO+" in upper or "X6858" in upper:
+            return "Infinix-Note-40-Pro-Plus-X6858"
+        if "NOTE40PRO" in upper or "X6850" in upper:
+            return "Infinix-Note-40-Pro-X6850"
+        if ("NOTE40" in upper and "5G" in upper) or "X6855" in upper:
+            return "Infinix-Note-40-5G-X6855"
+        if "NOTE40" in upper or "X6851" in upper:
+            return "Infinix-Note-40-4G-X6851"
+        if "ZERO40" in upper or "X6880" in upper:
+            return "Infinix-Zero-40-5G-X6880"
+        if "GT20PRO" in upper or "GT20" in upper or ("X6871" in upper and "BASE" not in upper):
+            return "Infinix-GT-20-Pro-X6871"
+        if "GT10PRO" in upper or "GT10" in upper or "X6720" in upper:
+            return "Infinix-GT-10-Pro-X6720"
+        if "HOT50PRO" in upper or "X6886" in upper:
+            return "Infinix-Hot-50-Pro-X6886"
+        if "HOT50" in upper or "X6885" in upper:
+            return "Infinix-Hot-50-X6885"
+        if "X6881" in upper or "HOT50I" in upper:
+            return "Infinix-Hot-50i-X6881"
+        if "X6873" in upper:
+            return "Infinix-Zero-30-5G-X6873"
+        if "POVA6PRO" in upper or "LI6" in upper:
+            return "Tecno-Pova-6-Pro-LI6"
+        if "CAMON30PRO" in upper or "CL7" in upper:
+            return "Tecno-Camon-30-Pro-CL7"
+        if "CAMON30" in upper or "LI7" in upper:
+            return "Tecno-Camon-30-5G-LI7"
+        if "LAVA" in upper or "LXX52" in upper:
+            return "Lava-Agni-Universal"
+
         for code, full_name in cls.DEVICE_MAP.items():
             if code in upper:
                 return full_name
@@ -51,12 +89,12 @@ class CloudMirrorEngine:
         """
         Maps any firmware/ROM file into clean, intuitive logical folders.
         """
-        device = cls.resolve_device(filename)
+        device = cls.resolve_device(filename, original_path)
         upper_name = filename.upper()
         upper_path = original_path.upper()
 
-        # 1. Flashable ROMs (A/B Dynamic Partition Packages - recovery-ab.zip / port ROMs)
-        if "RECOVERY-AB" in upper_name or "FLASHABLE" in upper_path or "-PORT-" in upper_name:
+        # 1. Flashable ROMs (A/B Dynamic Partition Packages - recovery-ab.zip from /FLASHABLE/)
+        if "RECOVERY-AB" in upper_name or "FLASHABLE" in upper_path:
             category = "Flashable-ROMs"
             target_folder = f"Devices/{device}/Flashable-ROMs"
             return {
@@ -67,7 +105,19 @@ class CloudMirrorEngine:
                 "tag_prefix": "rom"
             }
 
-        # 2. Custom Recoveries (OrangeFox / TWRP / PBRP .img files)
+        # 2. Ported Custom ROMs (From /PORT/ folder, or super.img.xz, or BASE/PORT tags)
+        if "PORT" in upper_path or "SUPER.IMG" in upper_name or "BASE-" in upper_name or "-FLASH.ZIP" in upper_name or "-PORT-" in upper_name:
+            category = "Ported-ROMs"
+            target_folder = f"Devices/{device}/Ported-ROMs"
+            return {
+                "category": category,
+                "device": device,
+                "target_folder": target_folder,
+                "clean_path": f"{target_folder}/{filename}",
+                "tag_prefix": "port-rom"
+            }
+
+        # 3. Custom Recoveries (OrangeFox / TWRP / PBRP .img files)
         if "ORANGEFOX" in upper_name or "TWRP" in upper_name or (upper_name.endswith(".IMG") and "RECOVERY" in upper_name) or "RECOVERY" in upper_path:
             category = "Custom-Recoveries"
             target_folder = f"Devices/{device}/Recovery-Images"
@@ -79,7 +129,7 @@ class CloudMirrorEngine:
                 "tag_prefix": "recovery"
             }
 
-        # 3. Custom Kernels (AK3 / AnyKernel3)
+        # 4. Custom Kernels (AK3 / AnyKernel3)
         if "AK3" in upper_name or "KERNEL" in upper_path or "KERNEL" in upper_name:
             category = "Custom-Kernels"
             kver = "Linux-5.10"
@@ -99,7 +149,7 @@ class CloudMirrorEngine:
                 "tag_prefix": "kernel"
             }
 
-        # 4. Stock Boot / Init_Boot Images
+        # 5. Stock Boot / Init_Boot Images
         if "BOOT" in upper_name or "STOCK-IMAGE" in upper_path:
             category = "Stock-Images"
             target_folder = f"Devices/{device}/Stock-Images"
@@ -111,7 +161,7 @@ class CloudMirrorEngine:
                 "tag_prefix": "boot"
             }
 
-        # 5. Extracted OTA Payloads / Raw Partitions
+        # 6. Extracted OTA Payloads / Raw Partitions
         if "IMAGES.TAR" in upper_name or "OTA-EXTRACT" in upper_path or ".ZST" in upper_name:
             category = "OTA-Payloads"
             target_folder = f"OTA-Payloads/Partition-Dumps/{device}"
@@ -123,7 +173,7 @@ class CloudMirrorEngine:
                 "tag_prefix": "ota"
             }
 
-        # 6. Porting Ecosystem & Vendor Libraries
+        # 7. Porting Ecosystem & Vendor Libraries
         if "VENDOR64" in upper_name or "PORT-FILES" in upper_path or "PORT_FILES" in upper_path:
             category = "Porting-Files"
             target_folder = f"Porting-Files/Vendor64/{device}"
@@ -135,7 +185,7 @@ class CloudMirrorEngine:
                 "tag_prefix": "port"
             }
 
-        # 7. Official Fastboot Firmware
+        # 8. Official Fastboot Firmware
         if "OFFICIAL" in upper_name or "OFFICIAL-FW" in upper_path or upper_name.endswith(".ZIP"):
             category = "Official-Firmware"
             target_folder = f"Devices/{device}/Official-Firmware"
