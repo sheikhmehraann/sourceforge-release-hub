@@ -22,7 +22,7 @@ from core.sourceforge_client import SourceForgeClient
 def get_existing_github_releases():
     """Fetches set of already published release tags from GitHub repository."""
     try:
-        res = subprocess.run(["gh", "release", "list", "--limit", "500", "--json", "tagName"], capture_output=True, text=True, check=True)
+        res = subprocess.run(["gh", "release", "list", "--limit", "1000", "--json", "tagName"], capture_output=True, text=True, check=True)
         if res.stdout.strip():
             data = json.loads(res.stdout)
             return {item["tagName"] for item in data}

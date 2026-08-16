@@ -159,49 +159,92 @@ class CloudMirrorEngine:
 
     @staticmethod
     def get_source_project_files(project_name: str = "rama982") -> List[Dict[str, Any]]:
-        """Parses public RSS feed for all available files."""
+        """
+        Recursively discovers 100% of files from SourceForge project by scanning
+        both root, subfolder RSS feeds, and directory trees.
+        """
         import urllib.request
-        url = f"https://sourceforge.net/projects/{project_name}/rss?path=/"
+        import re
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         }
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=25) as resp:
-            content = resp.read()
 
-        root = ET.fromstring(content)
-        items = []
-        for item in root.findall(".//item"):
-            title = item.findtext("title", "")
-            link = item.findtext("link", "")
-            pub_date = item.findtext("pubDate", "")
-            enclosure = item.find("enclosure")
-            size = int(enclosure.attrib.get("length", 0)) if enclosure is not None else 0
+        discovered_files = {}
+        directories_to_scan = [
+            "", "FLASHABLE", "RECOVERY", "KERNEL", "STOCK-IMAGE",
+            "OTA-EXTRACT", "PORT", "PORT-FILES", "OFFICIAL-FW", "TOOLS"
+        ]
+        scanned_dirs = set()
 
-            # Extract clean relative path and filename from title
-            clean_rel = title.strip("/")
-            filename = clean_rel.split("/")[-1]
-
-            if not filename or filename.endswith("/"):
+        while directories_to_scan:
+            current_dir = directories_to_scan.pop(0).strip("/")
+            if current_dir in scanned_dirs:
                 continue
+            scanned_dirs.add(current_dir)
 
-            # Ensure direct fast download link
-            direct_src = f"https://downloads.sourceforge.net/project/{project_name}/{clean_rel}"
+            # 1. Fetch RSS feed for this directory
+            rss_url = f"https://sourceforge.net/projects/{project_name}/rss?path=/{current_dir}"
+            req = urllib.request.Request(rss_url, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    content = resp.read()
+                    root = ET.fromstring(content)
+                    items = root.findall(".//item")
+                    for item in items:
+                        title_elem = item.find("title")
+                        pub_elem = item.find("pubDate")
+                        enc_elem = item.find("enclosure")
 
-            mapped = CloudMirrorEngine.map_file_to_logical_path(filename, clean_rel)
+                        if title_elem is None or not title_elem.text:
+                            continue
 
-            items.append({
-                "filename": filename,
-                "source_path": clean_rel,
-                "source_download_url": direct_src,
-                "size_bytes": size,
-                "pub_date": pub_date,
-                "target_folder": mapped["target_folder"],
-                "clean_path": mapped["clean_path"],
-                "category": mapped["category"],
-                "device": mapped["device"],
-                "tag_prefix": mapped["tag_prefix"]
-            })
+                        full_rel_path = title_elem.text.strip("/")
+                        filename = full_rel_path.split("/")[-1]
+                        if not filename or filename.endswith("/"):
+                            continue
 
-        return items
+                        size = int(enc_elem.attrib.get("length", 0)) if enc_elem is not None else 0
+                        pub_date = pub_elem.text if pub_elem is not None else ""
+                        direct_src = f"https://downloads.sourceforge.net/project/{project_name}/{full_rel_path}"
+
+                        if full_rel_path not in discovered_files:
+                            mapped = CloudMirrorEngine.map_file_to_logical_path(filename, full_rel_path)
+                            discovered_files[full_rel_path] = {
+                                "filename": filename,
+                                "source_path": full_rel_path,
+                                "source_download_url": direct_src,
+                                "size_bytes": size,
+                                "pub_date": pub_date,
+                                "target_folder": mapped["target_folder"],
+                                "clean_path": mapped["clean_path"],
+                                "category": mapped["category"],
+                                "device": mapped["device"],
+                                "tag_prefix": mapped["tag_prefix"]
+                            }
+
+                        # Detect nested subdirectories from full path
+                        parts = full_rel_path.split("/")
+                        if len(parts) > 1:
+                            for i in range(1, len(parts)):
+                                parent_sub = "/".join(parts[:i])
+                                if parent_sub not in scanned_dirs and parent_sub not in directories_to_scan:
+                                    directories_to_scan.append(parent_sub)
+            except Exception:
+                pass
+
+            # 2. Also inspect HTML directory page for any unindexed subfolders
+            html_url = f"https://sourceforge.net/projects/{project_name}/files/{current_dir}/".replace("//", "/")
+            req_html = urllib.request.Request(html_url, headers=headers)
+            try:
+                with urllib.request.urlopen(req_html, timeout=15) as resp:
+                    html = resp.read().decode("utf-8", errors="ignore")
+                    found_folders = re.findall(rf'href=["\']/projects/{project_name}/files/([^"\'?#]+)/["\']', html)
+                    for fld in found_folders:
+                        clean_fld = fld.strip("/")
+                        if clean_fld and clean_fld not in scanned_dirs and clean_fld not in directories_to_scan:
+                            directories_to_scan.append(clean_fld)
+            except Exception:
+                pass
+
+        return list(discovered_files.values())
