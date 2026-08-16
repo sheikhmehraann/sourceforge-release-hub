@@ -55,10 +55,21 @@ class CloudMirrorEngine:
         upper_name = filename.upper()
         upper_path = original_path.upper()
 
-        # 1. Custom Recoveries (OrangeFox / TWRP / PBRP)
-        if "ORANGEFOX" in upper_name or "TWRP" in upper_name or "RECOVERY" in upper_path:
+        # 1. Flashable ROMs (A/B Dynamic Partition Packages - recovery-ab.zip / port ROMs)
+        if "RECOVERY-AB" in upper_name or "FLASHABLE" in upper_path or "-PORT-" in upper_name:
+            category = "Flashable-ROMs"
+            target_folder = f"Devices/{device}/Flashable-ROMs"
+            return {
+                "category": category,
+                "device": device,
+                "target_folder": target_folder,
+                "clean_path": f"{target_folder}/{filename}",
+                "tag_prefix": "rom"
+            }
+
+        # 2. Custom Recoveries (OrangeFox / TWRP / PBRP .img files)
+        if "ORANGEFOX" in upper_name or "TWRP" in upper_name or (upper_name.endswith(".IMG") and "RECOVERY" in upper_name) or "RECOVERY" in upper_path:
             category = "Custom-Recoveries"
-            tool_type = "OrangeFox" if "ORANGEFOX" in upper_name else "TWRP"
             target_folder = f"Devices/{device}/Recovery-Images"
             return {
                 "category": category,
@@ -68,7 +79,7 @@ class CloudMirrorEngine:
                 "tag_prefix": "recovery"
             }
 
-        # 2. Custom Kernels (AK3 / AnyKernel3)
+        # 3. Custom Kernels (AK3 / AnyKernel3)
         if "AK3" in upper_name or "KERNEL" in upper_path or "KERNEL" in upper_name:
             category = "Custom-Kernels"
             kver = "Linux-5.10"
@@ -86,18 +97,6 @@ class CloudMirrorEngine:
                 "target_folder": target_folder,
                 "clean_path": f"{target_folder}/{filename}",
                 "tag_prefix": "kernel"
-            }
-
-        # 3. Flashable Recovery ROMs (A/B Dynamic Partition Packages)
-        if "RECOVERY-AB" in upper_name or "FLASHABLE" in upper_path or "FLASHABLE" in upper_name:
-            category = "Flashable-ROMs"
-            target_folder = f"Devices/{device}/Flashable-ROMs"
-            return {
-                "category": category,
-                "device": device,
-                "target_folder": target_folder,
-                "clean_path": f"{target_folder}/{filename}",
-                "tag_prefix": "rom"
             }
 
         # 4. Stock Boot / Init_Boot Images
@@ -124,20 +123,8 @@ class CloudMirrorEngine:
                 "tag_prefix": "ota"
             }
 
-        # 6. Official Fastboot Firmware
-        if "OFFICIAL" in upper_name or "OFFICIAL-FW" in upper_path:
-            category = "Stock-Firmware"
-            target_folder = f"Devices/{device}/Official-Firmware"
-            return {
-                "category": category,
-                "device": device,
-                "target_folder": target_folder,
-                "clean_path": f"{target_folder}/{filename}",
-                "tag_prefix": "stock-fw"
-            }
-
-        # 7. Porting Ecosystem & Vendor Libraries
-        if "VENDOR64" in upper_name or "PORT" in upper_path or "PORT-FILES" in upper_path:
+        # 6. Porting Ecosystem & Vendor Libraries
+        if "VENDOR64" in upper_name or "PORT-FILES" in upper_path or "PORT_FILES" in upper_path:
             category = "Porting-Files"
             target_folder = f"Porting-Files/Vendor64/{device}"
             return {
@@ -146,6 +133,18 @@ class CloudMirrorEngine:
                 "target_folder": target_folder,
                 "clean_path": f"{target_folder}/{filename}",
                 "tag_prefix": "port"
+            }
+
+        # 7. Official Fastboot Firmware
+        if "OFFICIAL" in upper_name or "OFFICIAL-FW" in upper_path or upper_name.endswith(".ZIP"):
+            category = "Official-Firmware"
+            target_folder = f"Devices/{device}/Official-Firmware"
+            return {
+                "category": category,
+                "device": device,
+                "target_folder": target_folder,
+                "clean_path": f"{target_folder}/{filename}",
+                "tag_prefix": "firmware"
             }
 
         # Default: Tools & Utilities
